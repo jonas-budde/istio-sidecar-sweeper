@@ -21,8 +21,11 @@ jobs:
           for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             os=${target%/*}; arch=${target#*/}
             ext=""; [ "$os" = windows ] && ext=".exe"
+            stage=$(mktemp -d)
             CGO_ENABLED=0 GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=$GITHUB_REF_NAME" \
-              -o "dist/kubectl-istio_sweeper_${os}_${arch}${ext}" ./cmd/kubectl-istio_sweeper
+              -o "$stage/kubectl-istio_sweeper${ext}" ./cmd/kubectl-istio_sweeper
+            cp LICENSE "$stage/"
+            tar -czf "dist/kubectl-istio_sweeper_${os}_${arch}.tar.gz" -C "$stage" .
           done
           (cd dist && sha256sum * > checksums.txt)
       - name: Publish release

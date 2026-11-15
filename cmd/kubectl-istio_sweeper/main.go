@@ -66,6 +66,7 @@ func run(args []string) error {
 		single     = fs.Bool("allow-single-replica", false, "restart: also restart single-replica workloads")
 		timeout    = fs.Duration("timeout", 5*time.Minute, "restart: rollout timeout per workload")
 	)
+	fs.StringVar(namespace, "n", "", "shorthand for --namespace")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}

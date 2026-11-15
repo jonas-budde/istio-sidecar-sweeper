@@ -10,6 +10,10 @@ Status: early prototype.
 
 For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`), it reads the `istio-sidecar-injector-<revision>` ConfigMap in `aks-istio-system` and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
 
+## Install
+
+Download the archive for your platform from the [releases page](https://github.com/jonas-budde/istio-sidecar-sweeper/releases), extract `kubectl-istio_sweeper` and put it on your `PATH`. Then run `kubectl istio-sweeper`. Krew support is planned, not available yet.
+
 ## Usage
 
 ```
