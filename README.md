@@ -2,13 +2,17 @@
 
 A kubectl plugin that finds pods whose Istio sidecar is out of date and restarts their workloads. Built for the AKS Istio add-on, where security patches and canary revision upgrades only reach running pods after a restart.
 
-Status: early prototype.
+Status: early prototype. Only tested on the AKS Istio add-on; defaults (`aks-istio-system`, `asm-*` revisions) are AKS-specific, other Istio distributions are untested.
 
 > **Note:** This tool only matters for sidecar mode. The Istio project is moving toward ambient mode (no sidecars, so nothing to restart), and AKS offers Azure Kubernetes Application Network (AppNet), currently in preview ([docs](https://learn.microsoft.com/en-us/azure/application-network/get-started)). The docs state that a cluster with the Istio add-on enabled can't join an Application Network, so moving over means leaving the add-on. New setups should look at AppNet first; this tool is for clusters that stay on the Istio add-on with sidecars. Upstream ambient GA is from Istio 1.24 (my recollection, not re-checked here), and Microsoft has not announced an end date for the sidecar add-on that I know of.
 
 ## How it decides a pod is stale
 
 For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`), it reads the `istio-sidecar-injector-<revision>` ConfigMap in `aks-istio-system` and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
+
+## Install
+
+Download the archive for your platform from the [releases page](https://github.com/jonas-budde/istio-sidecar-sweeper/releases), extract `kubectl-istio_sweeper` and put it on your `PATH`. Then run `kubectl istio-sweeper`. Krew support is planned, not available yet.
 
 ## Usage
 
