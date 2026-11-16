@@ -8,7 +8,7 @@ Status: early prototype. Tested on the AKS Istio add-on and on upstream Istio (i
 
 ## How it decides a pod is stale
 
-For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`, which means the unrevisioned `istio-sidecar-injector`), it reads the `istio-sidecar-injector[-<revision>]` ConfigMap in the control plane namespace (`aks-istio-system` on AKS, `istio-system` upstream; detected automatically) and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
+For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`, which means the unrevisioned `istio-sidecar-injector`), it reads the `istio-sidecar-injector[-<revision>]` ConfigMap in the control plane namespace (`aks-istio-system` with `-provider azure`, `istio-system` with `-provider generic`) and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
 
 ## Install
 
@@ -28,7 +28,16 @@ CI: `kubectl-istio_sweeper scan -exit-code` exits with status 2 if outdated side
 
 A namespace whose revision no longer has an injector ConfigMap (for example after an upgrade removed the previous revision, based on the `az aks mesh upgrade complete` help text; I did not observe it) is reported as a warning and skipped, instead of aborting the scan.
 
-Flags: `-kubeconfig`, `-exit-code`, `-context`, `-namespace`, `-istio-namespace` (default: auto-detect `aks-istio-system`, then `istio-system`), `-apply`, `-allow-single-replica`, `-timeout`, `-exclude-namespaces` (default `kube-system,aks-istio-system,istio-system`), `version`.
+Providers set the defaults for the control plane namespace and the excluded namespaces. The default is `azure`; use `-provider generic` for upstream Istio.
+
+| `-provider` | Istio namespace | Excluded namespaces |
+|---|---|---|
+| `azure` (AKS Istio add-on) | `aks-istio-system` | `kube-system`, `aks-istio-system` |
+| `generic` (upstream Istio) | `istio-system` | `kube-system`, `istio-system` |
+
+More providers can be added in `internal/sweeper/expected.go`.
+
+Flags: `-provider`, `-kubeconfig`, `-exit-code`, `-context`, `-namespace` (`-n`), `-istio-namespace` and `-exclude-namespaces` (both override the provider defaults), `-apply`, `-allow-single-replica`, `-timeout`, `version`.
 
 Restart behavior:
 - Deployments, StatefulSets and DaemonSets are restarted one at a time via the pod template annotation (same as `kubectl rollout restart`) and the tool waits for the rollout.
@@ -47,7 +56,7 @@ Step-by-step AKS canary upgrade with this tool: [docs/upgrade-guide.md](docs/upg
 - Same setup directly on `asm-1-30`: Deployment, StatefulSet (2 replicas) and DaemonSet (2 nodes) were all detected and restarted, and the scan was clean afterwards.
 - Patch-level update **simulated**: I edited the `istio-sidecar-injector-asm-1-30` ConfigMap (tag `v1.30.7-1` to `v1.30.7-6`), so new pods were injected with the new image. This mimics a patch rollout by the add-on, but it is not a real one.
 - The readiness pre-check, namespace exclusion, removed-revision warning and `-exit-code` are covered by unit tests only, not run on a cluster.
-- Upstream Istio (kind, Kubernetes 1.35, `istioctl`, no AKS): in-place upgrade 1.29.10 to 1.30.0 with `istio-injection=enabled` (scan, dry run, restart, clean rescan), then a second revision `canary` with the namespace relabeled: Deployment, StatefulSet and DaemonSet were detected and restarted (the single-replica DaemonSet only with `-allow-single-replica`), `-exit-code` returned 2 while stale pods existed and 0 afterwards. The namespace was passed with `-istio-namespace istio-system`; auto-detection was added afterwards and covered by a unit test only. No real patch release was tested there.
+- Upstream Istio (kind, Kubernetes 1.35, `istioctl`, no AKS): in-place upgrade 1.29.10 to 1.30.0 with `istio-injection=enabled` (scan, dry run, restart, clean rescan), then a second revision `canary` with the namespace relabeled: Deployment, StatefulSet and DaemonSet were detected and restarted (the single-replica DaemonSet only with `-allow-single-replica`), `-exit-code` returned 2 while stale pods existed and 0 afterwards. The namespace was passed with `-istio-namespace istio-system` (equivalent to `-provider generic`; the flag itself was added afterwards and is covered by a unit test only). No real patch release was tested there.
 
 ## Notes
 

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -57,25 +56,29 @@ func ParseInjectorValues(rev, values string) (Expected, error) {
 	}, nil
 }
 
-// DetectIstioNamespace returns the first well-known control plane namespace
-// (AKS add-on, then upstream Istio) that holds a sidecar injector ConfigMap.
-func DetectIstioNamespace(ctx context.Context, cs kubernetes.Interface) (string, error) {
-	candidates := []string{"aks-istio-system", "istio-system"}
-	for _, n := range candidates {
-		cms, err := cs.CoreV1().ConfigMaps(n).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
-				continue
-			}
-			return "", err
+// Provider holds the defaults of an Istio distribution.
+type Provider struct {
+	Name           string
+	IstioNamespace string
+	Exclude        []string
+}
+
+// Providers lists the supported distributions.
+var Providers = []Provider{
+	{Name: "azure", IstioNamespace: "aks-istio-system", Exclude: []string{"kube-system", "aks-istio-system"}},
+	{Name: "generic", IstioNamespace: "istio-system", Exclude: []string{"kube-system", "istio-system"}},
+}
+
+// ProviderByName returns the provider with the given name.
+func ProviderByName(name string) (Provider, error) {
+	var names []string
+	for _, p := range Providers {
+		if p.Name == name {
+			return p, nil
 		}
-		for i := range cms.Items {
-			if strings.HasPrefix(cms.Items[i].Name, "istio-sidecar-injector") {
-				return n, nil
-			}
-		}
+		names = append(names, p.Name)
 	}
-	return "", fmt.Errorf("no istio-sidecar-injector ConfigMap found in %s; set -istio-namespace", strings.Join(candidates, " or "))
+	return Provider{}, fmt.Errorf("unknown provider %q (supported: %s)", name, strings.Join(names, ", "))
 }
 
 // LoadExpected returns the expected proxy image for a revision ("default" for the unrevisioned injector).

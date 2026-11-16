@@ -136,15 +136,11 @@ func TestImageTag(t *testing.T) {
 	}
 }
 
-func TestDetectIstioNamespace(t *testing.T) {
-	upstream := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "istio-sidecar-injector", Namespace: "istio-system"}}
-	if got, err := DetectIstioNamespace(context.Background(), fake.NewSimpleClientset(upstream)); err != nil || got != "istio-system" {
-		t.Fatalf("upstream: got %q, %v", got, err)
+func TestProviderByName(t *testing.T) {
+	if p, err := ProviderByName("azure"); err != nil || p.IstioNamespace != "aks-istio-system" {
+		t.Fatalf("azure: %+v, %v", p, err)
 	}
-	if got, err := DetectIstioNamespace(context.Background(), fake.NewSimpleClientset(upstream, injector("asm-1-30", "1.30.2"))); err != nil || got != "aks-istio-system" {
-		t.Fatalf("aks preferred: got %q, %v", got, err)
-	}
-	if _, err := DetectIstioNamespace(context.Background(), fake.NewSimpleClientset()); err == nil {
-		t.Fatal("expected error when no injector exists")
+	if _, err := ProviderByName("nope"); err == nil {
+		t.Fatal("expected error for unknown provider")
 	}
 }
