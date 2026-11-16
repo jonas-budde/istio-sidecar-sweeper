@@ -59,8 +59,8 @@ func run(args []string) error {
 		kubeconfig = fs.String("kubeconfig", "", "path to kubeconfig (default: standard loading rules)")
 		kctx       = fs.String("context", "", "kubeconfig context")
 		namespace  = fs.String("namespace", "", "only this namespace (default: all)")
-		istioNS    = fs.String("istio-namespace", "aks-istio-system", "namespace of the Istio control plane")
-		exclude    = fs.String("exclude-namespaces", "kube-system,aks-istio-system", "comma-separated namespaces to ignore")
+		istioNS    = fs.String("istio-namespace", "", "namespace of the Istio control plane (default: auto-detect aks-istio-system, then istio-system)")
+		exclude    = fs.String("exclude-namespaces", "kube-system,aks-istio-system,istio-system", "comma-separated namespaces to ignore")
 		exitCode   = fs.Bool("exit-code", false, "scan: exit with status 2 if outdated sidecars or warnings are found (for CI)")
 		apply      = fs.Bool("apply", false, "restart: really restart (default is a dry run)")
 		single     = fs.Bool("allow-single-replica", false, "restart: also restart single-replica workloads")
@@ -85,6 +85,11 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	if *istioNS == "" {
+		if *istioNS, err = sweeper.DetectIstioNamespace(ctx, cs); err != nil {
+			return err
+		}
+	}
 	stale, warnings, err := sweeper.Scan(ctx, cs, *istioNS, *namespace, strings.Split(*exclude, ",")...)
 	if err != nil {
 		return err

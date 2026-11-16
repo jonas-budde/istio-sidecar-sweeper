@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
@@ -54,6 +55,27 @@ func ParseInjectorValues(rev, values string) (Expected, error) {
 		Image:    strings.TrimRight(v.Global.Hub, "/") + "/" + name + ":" + tag,
 		Tag:      tag,
 	}, nil
+}
+
+// DetectIstioNamespace returns the first well-known control plane namespace
+// (AKS add-on, then upstream Istio) that holds a sidecar injector ConfigMap.
+func DetectIstioNamespace(ctx context.Context, cs kubernetes.Interface) (string, error) {
+	candidates := []string{"aks-istio-system", "istio-system"}
+	for _, n := range candidates {
+		cms, err := cs.CoreV1().ConfigMaps(n).List(ctx, metav1.ListOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) || apierrors.IsForbidden(err) {
+				continue
+			}
+			return "", err
+		}
+		for i := range cms.Items {
+			if strings.HasPrefix(cms.Items[i].Name, "istio-sidecar-injector") {
+				return n, nil
+			}
+		}
+	}
+	return "", fmt.Errorf("no istio-sidecar-injector ConfigMap found in %s; set -istio-namespace", strings.Join(candidates, " or "))
 }
 
 // LoadExpected returns the expected proxy image for a revision ("default" for the unrevisioned injector).

@@ -49,7 +49,7 @@ Safety behavior:
 - Waits for each rollout before the next workload.
 - Skips workloads that are not fully ready (also in dry run).
 - Skips single-replica workloads unless `-allow-single-replica` is set.
-- Excludes `kube-system` and `aks-istio-system` by default (`-exclude-namespaces`).
+- Excludes `kube-system`, `aks-istio-system` and `istio-system` by default (`-exclude-namespaces`).
 
 ## 5. Verify
 
