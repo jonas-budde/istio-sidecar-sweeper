@@ -135,3 +135,12 @@ func TestImageTag(t *testing.T) {
 		}
 	}
 }
+
+func TestProviderByName(t *testing.T) {
+	if p, err := ProviderByName("azure"); err != nil || p.IstioNamespace != "aks-istio-system" {
+		t.Fatalf("azure: %+v, %v", p, err)
+	}
+	if _, err := ProviderByName("nope"); err == nil {
+		t.Fatal("expected error for unknown provider")
+	}
+}

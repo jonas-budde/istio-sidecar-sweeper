@@ -1,14 +1,14 @@
 # istio-sidecar-sweeper
 
-A kubectl plugin that finds pods whose Istio sidecar is out of date and restarts their workloads. Built for the AKS Istio add-on, where security patches and canary revision upgrades only reach running pods after a restart.
+A kubectl plugin that finds pods whose Istio sidecar is out of date and restarts their workloads. Built for the AKS Istio add-on, where security patches and canary revision upgrades only reach running pods after a restart. It also works on upstream (self-managed) Istio.
 
-Status: early prototype. Only tested on the AKS Istio add-on; defaults (`aks-istio-system`, `asm-*` revisions) are AKS-specific, other Istio distributions are untested.
+Status: early prototype. Tested on the AKS Istio add-on and on upstream Istio (installed with `istioctl`, kind). Other distributions, Helm-based installs and ambient mode are untested.
 
 > **Note:** This tool only matters for sidecar mode. The Istio project is moving toward ambient mode (no sidecars, so nothing to restart), and AKS offers Azure Kubernetes Application Network (AppNet), currently in preview ([docs](https://learn.microsoft.com/en-us/azure/application-network/get-started)). The docs state that a cluster with the Istio add-on enabled can't join an Application Network, so moving over means leaving the add-on. New setups should look at AppNet first; this tool is for clusters that stay on the Istio add-on with sidecars. Upstream ambient GA is from Istio 1.24 (my recollection, not re-checked here), and Microsoft has not announced an end date for the sidecar add-on that I know of.
 
 ## How it decides a pod is stale
 
-For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`), it reads the `istio-sidecar-injector-<revision>` ConfigMap in `aks-istio-system` and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
+For every namespace with an `istio.io/rev` label (or `istio-injection=enabled`, which means the unrevisioned `istio-sidecar-injector`), it reads the `istio-sidecar-injector[-<revision>]` ConfigMap in the control plane namespace (`aks-istio-system` with `-provider azure`, `istio-system` with `-provider generic`) and takes the proxy image from `global.proxy.image`. A pod is stale if its `istio-proxy` image tag, or the revision in its `istio.io/rev` annotation, differs from that.
 
 ## Install
 
@@ -28,7 +28,16 @@ CI: `kubectl-istio_sweeper scan -exit-code` exits with status 2 if outdated side
 
 A namespace whose revision no longer has an injector ConfigMap (for example after an upgrade removed the previous revision, based on the `az aks mesh upgrade complete` help text; I did not observe it) is reported as a warning and skipped, instead of aborting the scan.
 
-Flags: `-kubeconfig`, `-exit-code`, `-context`, `-namespace`, `-istio-namespace` (default `aks-istio-system`), `-apply`, `-allow-single-replica`, `-timeout`, `-exclude-namespaces` (default `kube-system,aks-istio-system`), `version`.
+Providers set the defaults for the control plane namespace and the excluded namespaces. The default is `azure`; use `-provider generic` for upstream Istio.
+
+| `-provider` | Istio namespace | Excluded namespaces |
+|---|---|---|
+| `azure` (AKS Istio add-on) | `aks-istio-system` | `kube-system`, `aks-istio-system` |
+| `generic` (upstream Istio) | `istio-system` | `kube-system`, `istio-system` |
+
+More providers can be added in `internal/sweeper/expected.go`.
+
+Flags: `-provider`, `-kubeconfig`, `-exit-code`, `-context`, `-namespace` (`-n`), `-istio-namespace` and `-exclude-namespaces` (both override the provider defaults), `-apply`, `-allow-single-replica`, `-timeout`, `version`.
 
 Restart behavior:
 - Deployments, StatefulSets and DaemonSets are restarted one at a time via the pod template annotation (same as `kubectl rollout restart`) and the tool waits for the rollout.
@@ -47,6 +56,7 @@ Step-by-step AKS canary upgrade with this tool: [docs/upgrade-guide.md](docs/upg
 - Same setup directly on `asm-1-30`: Deployment, StatefulSet (2 replicas) and DaemonSet (2 nodes) were all detected and restarted, and the scan was clean afterwards.
 - Patch-level update **simulated**: I edited the `istio-sidecar-injector-asm-1-30` ConfigMap (tag `v1.30.7-1` to `v1.30.7-6`), so new pods were injected with the new image. This mimics a patch rollout by the add-on, but it is not a real one.
 - The readiness pre-check, namespace exclusion, removed-revision warning and `-exit-code` are covered by unit tests only, not run on a cluster.
+- Upstream Istio (kind, Kubernetes 1.35, `istioctl`, no AKS): in-place upgrade 1.29.10 to 1.30.0 with `istio-injection=enabled` (scan, dry run, restart, clean rescan), then a second revision `canary` with the namespace relabeled: Deployment, StatefulSet and DaemonSet were detected and restarted (the single-replica DaemonSet only with `-allow-single-replica`), `-exit-code` returned 2 while stale pods existed and 0 afterwards. The namespace was passed with `-istio-namespace istio-system` (equivalent to `-provider generic`; the flag itself was added afterwards and is covered by a unit test only). No real patch release was tested there.
 
 ## Notes
 

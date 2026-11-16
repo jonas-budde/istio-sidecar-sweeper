@@ -59,8 +59,9 @@ func run(args []string) error {
 		kubeconfig = fs.String("kubeconfig", "", "path to kubeconfig (default: standard loading rules)")
 		kctx       = fs.String("context", "", "kubeconfig context")
 		namespace  = fs.String("namespace", "", "only this namespace (default: all)")
-		istioNS    = fs.String("istio-namespace", "aks-istio-system", "namespace of the Istio control plane")
-		exclude    = fs.String("exclude-namespaces", "kube-system,aks-istio-system", "comma-separated namespaces to ignore")
+		provider   = fs.String("provider", "azure", "defaults for the Istio distribution: azure (AKS Istio add-on) or generic (upstream Istio)")
+		istioNS    = fs.String("istio-namespace", "", "namespace of the Istio control plane (default: from provider)")
+		exclude    = fs.String("exclude-namespaces", "", "comma-separated namespaces to ignore (default: from provider)")
 		exitCode   = fs.Bool("exit-code", false, "scan: exit with status 2 if outdated sidecars or warnings are found (for CI)")
 		apply      = fs.Bool("apply", false, "restart: really restart (default is a dry run)")
 		single     = fs.Bool("allow-single-replica", false, "restart: also restart single-replica workloads")
@@ -85,7 +86,18 @@ func run(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	stale, warnings, err := sweeper.Scan(ctx, cs, *istioNS, *namespace, strings.Split(*exclude, ",")...)
+	prov, err := sweeper.ProviderByName(*provider)
+	if err != nil {
+		return err
+	}
+	if *istioNS == "" {
+		*istioNS = prov.IstioNamespace
+	}
+	excluded := prov.Exclude
+	if *exclude != "" {
+		excluded = strings.Split(*exclude, ",")
+	}
+	stale, warnings, err := sweeper.Scan(ctx, cs, *istioNS, *namespace, excluded...)
 	if err != nil {
 		return err
 	}
